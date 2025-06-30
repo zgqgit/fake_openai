@@ -5,6 +5,7 @@ import asyncio
 import random
 import string
 import json
+from typing import Union, List, Optional
 
 app = FastAPI()
 
@@ -68,4 +69,51 @@ async def chat_completions(request: Request, body: ChatCompletionRequest):
             await asyncio.sleep(interval)
         # 结束信号
         yield "data: [DONE]\n\n"
-    return StreamingResponse(fake_stream(), media_type="text/event-stream") 
+    return StreamingResponse(fake_stream(), media_type="text/event-stream")
+
+class EmbeddingConfig(BaseModel):
+    embedding_length: int = 1536  # 默认长度
+    embedding_value: str = "random"  # zeros/ones/random/custom
+    embedding_custom: Optional[List[float]] = None  # embedding_value=custom时生效
+    response_delay: float = 0.0  # 响应延迟（秒）
+
+class EmbeddingRequest(BaseModel):
+    model: str
+    input: Union[str, List[str]]
+    user: Optional[str] = None
+    config: Optional[EmbeddingConfig] = None
+
+@app.post("/v1/embeddings")
+async def embeddings(request: Request, body: EmbeddingRequest):
+    config = body.config or EmbeddingConfig()
+    # 延迟响应
+    if config.response_delay > 0:
+        await asyncio.sleep(config.response_delay)
+    # 处理 input
+    inputs = body.input if isinstance(body.input, list) else [body.input]
+    data = []
+    for idx, inp in enumerate(inputs):
+        if config.embedding_value == "zeros":
+            embedding = [0.0] * config.embedding_length
+        elif config.embedding_value == "ones":
+            embedding = [1.0] * config.embedding_length
+        elif config.embedding_value == "custom" and config.embedding_custom:
+            embedding = config.embedding_custom[:config.embedding_length]
+            if len(embedding) < config.embedding_length:
+                embedding += [0.0] * (config.embedding_length - len(embedding))
+        else:  # random
+            embedding = [random.uniform(-1, 1) for _ in range(config.embedding_length)]
+        data.append({
+            "object": "embedding",
+            "index": idx,
+            "embedding": embedding,
+        })
+    return {
+        "object": "list",
+        "data": data,
+        "model": body.model,
+        "usage": {
+            "prompt_tokens": 0,
+            "total_tokens": 0
+        }
+    } 
