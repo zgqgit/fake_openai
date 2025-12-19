@@ -6,6 +6,7 @@ import random
 import string
 import json
 from typing import Union, List, Optional
+import time
 
 app = FastAPI()
 
@@ -116,4 +117,50 @@ async def embeddings(request: Request, body: EmbeddingRequest):
             "prompt_tokens": 0,
             "total_tokens": 0
         }
+    }
+
+class ImageGenerationConfig(BaseModel):
+    base_url: str = "https://fake-image.example.com"  # 基础URL
+    response_delay: float = 0.0  # 响应延迟（秒）
+
+class ImageGenerationRequest(BaseModel):
+    prompt: str
+    model: Optional[str] = "dall-e-3"
+    n: Optional[int] = 1
+    quality: Optional[str] = "standard"
+    response_format: Optional[str] = "url"
+    size: Optional[str] = "1024x1024"
+    style: Optional[str] = "vivid"
+    user: Optional[str] = None
+    config: Optional[ImageGenerationConfig] = None
+
+@app.post("/v1/images/generations")
+async def image_generations(request: Request, body: ImageGenerationRequest):
+    config = body.config or ImageGenerationConfig()
+    # 延迟响应
+    if config.response_delay > 0:
+        await asyncio.sleep(config.response_delay)
+
+    # 生成假的图片URL
+    created = int(time.time())
+    data = []
+    for i in range(body.n):
+        # 生成随机ID作为图片URL的一部分
+        image_id = ''.join(random.choices(string.ascii_letters + string.digits, k=16))
+        url = f"{config.base_url}/images/{image_id}.png"
+
+        if body.response_format == "b64_json":
+            # 如果需要base64格式，返回一个假的base64字符串
+            data.append({
+                "b64_json": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+            })
+        else:
+            # 默认返回URL格式
+            data.append({
+                "url": url
+            })
+
+    return {
+        "created": created,
+        "data": data
     } 
